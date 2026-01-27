@@ -1,5 +1,6 @@
 🧲 Simulador p-SSD: Computação Probabilística e Modelo de Ising
 ![License: MIT](https://img.shooray](https://opensource.org/licenses/MIT)Status: Simulação
+https://testinhottt-ux.github.io/p-ssd-simulator/pbitreal.html
 
 Um simulador web interativo e visualmente imersivo baseado no Modelo de Ising para demonstrar o comportamento de P-Bits (Probabilistic Bits) e relaxação termodinâmica em memórias tipo X-LC (Crossbar Logic).
 
