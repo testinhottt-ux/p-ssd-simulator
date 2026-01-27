@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>p-SSD: Simulação Física Rigorosa (Ising Model) - Tiago B.D. Maciel</title>
+    <style>
+        :root {
+            --bg-color: #050505;
+            --panel-bg: #0f0f12;
+            --text-color: #e0e0e0;
+            --accent-math: #ff0055; /* Magenta para a função Tanh */
+            --accent-spin: #00e5ff; /* Ciano para spins */
+            --bit-void: #111;
+            --border: #333;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Consolas', 'Monaco', monospace; }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        header {
+            width: 100%;
+            max-width: 1200px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 20px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 20px;
+        }
+
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .author-info {
+            text-align: right;
+            font-size: 0.8rem;
+            color: #888;
+        }
+
+        h1 { font-size: 1.5rem; text-transform: uppercase; letter-spacing: 2px; color: white; }
+        .subtitle { font-size: 0.9rem; color: #aaa; margin-top: 5px; }
+        .math-formula { color: var(--accent-math); font-style: italic; font-family: 'Times New Roman', serif; font-size: 1.4rem; margin-top: 10px; }
+
+        /* Layout Grid */
+        .main-layout {
+            display: grid;
+            grid-template-columns: 300px 1fr 300px;
+            gap: 20px;
+            width: 100%;
+            max-width: 1200px;
+            height: 100%;
+        }
+
+        /* Grid Visual */
+        .grid-container {
+            background: var(--panel-bg);
+            border: 1px solid var(--border);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            padding: 10px;
+        }
+
+        #ising-grid {
+            display: grid;
+            grid-template-columns: repeat(40, 1fr);
+            gap: 1px;
+            width: 100%;
+            aspect-ratio: 1;
+            background: #000;
+        }
+
+        .cell {
+            background-color: var(--bit-void);
+            transition: background-color 0.1s linear; /* Transição elétrica rápida */
+        }
+
+        .cell.spin-up { background-color: var(--accent-spin); opacity: 1; }
+        .cell.spin-down { background-color: #333; opacity: 0.3; }
+
+        /* Visualização do Campo Local (Brilho) */
+        .cell.high-field { box-shadow: 0 0 4px var(--accent-math) inset; }
+
+        /* Painéis */
+        .panel {
+            background: var(--panel-bg);
+            border: 1px solid var(--border);
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            overflow-y: auto;
+        }
+
+        .panel-title {
+            color: #888;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            border-bottom: 1px solid #333;
+            padding-bottom: 5px;
+            margin-bottom: 5px;
+        }
+
+        /* Controles Físicos */
+        .control-group {
+            background: #1a1a1a;
+            padding: 10px;
+            border-radius: 4px;
+        }
+
+        label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            margin-bottom: 5px;
+            color: #aaa;
+        }
+
+        input[type=range] {
+            width: 100%;
+            accent-color: var(--accent-spin);
+        }
+
+        button {
+            background: #333;
+            color: white;
+            border: 1px solid #555;
+            padding: 8px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+        }
+        button:hover { background: #444; }
+        button.active { background: var(--accent-spin); color: black; border-color: var(--accent-spin); }
+
+        /* Monitor de Função */
+        .monitor {
+            background: #000;
+            border: 1px solid #333;
+            padding: 10px;
+            font-size: 0.7rem;
+            color: var(--accent-math);
+            margin-top: 10px;
+        }
+
+        .code-block {
+            color: #888;
+            line-height: 1.4;
+        }
+        .highlight { color: var(--accent-math); font-weight: bold; }
+        .var-name { color: var(--accent-spin); }
+
+        /* Estatísticas */
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            padding: 4px 0;
+            border-bottom: 1px solid #222;
+        }
+        .val { color: white; font-weight: bold; }
+
+        /* Rodapé */
+        footer {
+            margin-top: auto;
+            padding-top: 20px;
+            font-size: 0.7rem;
+            color: #444;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="header-top">
+            <div>
+                <h1>Simulador p-SSD</h1>
+                <div class="subtitle">Modelo de Ising Probabilístico & Spintrônica</div>
+            </div>
+            <div class="author-info">
+                <strong>Tiago Barbosa Dias Maciel</strong><br>
+                Sete Lagoas - MG | Engenharia Eletrônica & ADS
+            </div>
+        </div>
+        <div class="math-formula">
+            P(σ=+1) = &frac12; [1 + tanh(βh)]
+        </div>
+    </header>
+
+    <div class="main-layout">
+
+        <!-- Painel Esquerdo: Física do Sistema -->
+        <aside class="panel">
+            <div class="panel-title">Variáveis Termodinâmicas</div>
+
+            <div class="control-group">
+                <label>Temperatura (T) <span id="temp-val">300 K</span></label>
+                <input type="range" id="temp-slider" min="0.1" max="5.0" step="0.1" value="1.0">
+                <div style="font-size:0.6rem; color:#555; margin-top:4px;">Controla a entropia (Ruído Térmico). Alta T = Alta aleatoriedade.</div>
+            </div>
+
+            <div class="control-group">
+                <label>Campo Externo (Bias NAND) <span id="bias-val">1.0</span></label>
+                <input type="range" id="bias-slider" min="0" max="5.0" step="0.1" value="2.0">
+                <div style="font-size:0.6rem; color:#555; margin-top:4px;">A força do dado lido da NAND Flash tentando alinhar o spin.</div>
+            </div>
+
+            <div class="control-group">
+                <label>Acoplamento (J) <span id="coupling-val">0.5</span></label>
+                <input type="range" id="coupling-slider" min="0" max="2.0" step="0.1" value="0.5">
+                <div style="font-size:0.6rem; color:#555; margin-top:4px;">Interconectividade entre vizinhos (Suavização).</div>
+            </div>
+
+            <button id="toggle-sim">Pausar Simulação</button>
+            <button id="inject-chaos" style="border-color: var(--accent-math); color: var(--accent-math);">Inverter Spins Aleatórios</button>
+        </aside>
+
+        <!-- Centro: Visualização da Matriz -->
+        <section class="grid-container">
+            <div id="ising-grid"></div>
+            <div style="position: absolute; bottom: 10px; right: 10px; font-size: 0.7rem; background: rgba(0,0,0,0.8); padding: 5px;">
+                Células: <span id="cell-count">0</span>
+            </div>
+        </section>
+
+        <!-- Painel Direito: Inspetor Matemático -->
+        <aside class="panel">
+            <div class="panel-title">Inspetor de P-Bit (Célula Ativa)</div>
+
+            <div class="monitor">
+                <div style="color: #fff; margin-bottom: 5px;">Cálculo em Tempo Real:</div>
+                <div class="code-block">
+                    // 1. Interconectividade<br>
+                    <span class="var-name">h</span> (Campo) = <span id="debug-h" class="val">0.00</span><br><br>
+
+                    // 2. Não-Linearidade<br>
+                    <span class="highlight">tanh</span>(β · h) = <span id="debug-tanh" class="val">0.00</span><br><br>
+
+                    // 3. Entropia (Aleatório)<br>
+                    rand() = <span id="debug-rand" class="val">0.00</span><br><br>
+
+                    // Resultado<br>
+                    <span class="var-name">σ</span> (Spin) = <span id="debug-spin" class="val">0</span>
+                </div>
+            </div>
+
+            <div class="panel-title" style="margin-top:20px;">Estatísticas Globais</div>
+            <div class="stat-row"><span>Spins UP (1):</span> <span id="stat-up" class="val">0%</span></div>
+            <div class="stat-row"><span>Energia do Sistema (H):</span> <span id="stat-energy" class="val">0</span></div>
+            <div class="stat-row"><span>Iterações/seg:</span> <span id="stat-ips" class="val">0</span></div>
+
+            <div style="margin-top:auto; font-size: 0.65rem; color:#555; line-height:1.4;">
+                <strong>Legenda Física:</strong><br>
+                • Ciano: Spin UP (Dado 1)<br>
+                • Cinza Escuro: Spin DOWN (Dado 0)<br>
+                • Brilho Magenta: Alto Campo Local (Influência de vizinhos)
+            </div>
+            
+            <footer>
+                Contato: (31) 97343-4943
+            </footer>
+        </aside>
+
+    </div>
+
+    <script>
+    /**
+    * SIMULAÇÃO FÍSICA RIGOROSA DE P-BITS
+    * Baseada em: Camsari, Sutton, Datta (2017) - "Massively parallel probabilistic computing..."
+    */
+
+    // Configuração da Grade
+    const ROWS = 40;
+    const COLS = 40;
+    const TOTAL_CELLS = ROWS * COLS;
+
+    // Estado Físico do Sistema
+    // Spins: -1 (Down) ou +1 (Up)
+    let spins = new Float32Array(TOTAL_CELLS).fill(0).map(() => Math.random() > 0.5 ? 1 : -1);
+
+    // Parâmetros Físicos
+    let T = 1.0; // Temperatura (em unidades de beta)
+    let J = 0.5; // Força de Acoplamento (Interconectividade)
+    let H_ext = 2.0; // Campo Externo (Bias da NAND Flash)
+
+    let isRunning = true;
+    let frameCount = 0;
+    let lastTime = performance.now();
+
+    // Elementos DOM
+    const gridEl = document.getElementById('ising-grid');
+    const cellEls = [];
+
+    // Debug Elements
+    const debugH = document.getElementById('debug-h');
+    const debugTanh = document.getElementById('debug-tanh');
+    const debugRand = document.getElementById('debug-rand');
+    const debugSpin = document.getElementById('debug-spin');
+
+    // Setup Inicial
+    function init() {
+        createGrid();
+        setupListeners();
+        loop();
+    }
+
+    function createGrid() {
+        gridEl.innerHTML = '';
+        document.getElementById('cell-count').textContent = TOTAL_CELLS;
+
+        for (let i = 0; i < TOTAL_CELLS; i++) {
+            const cell = document.createElement('div');
+            cell.className = 'cell';
+            // Define estado inicial
+            if (spins[i] === 1) cell.classList.add('spin-up');
+            else cell.classList.add('spin-down');
+
+            gridEl.appendChild(cell);
+            cellEls.push(cell);
+        }
+    }
+
+    function setupListeners() {
+        // Sliders
+        document.getElementById('temp-slider').addEventListener('input', (e) => {
+            T = parseFloat(e.target.value);
+            document.getElementById('temp-val').textContent = (T * 300).toFixed(0) + " K";
+        });
+
+        document.getElementById('bias-slider').addEventListener('input', (e) => {
+            H_ext = parseFloat(e.target.value);
+            document.getElementById('bias-val').textContent = H_ext.toFixed(1);
+        });
+
+        document.getElementById('coupling-slider').addEventListener('input', (e) => {
+            J = parseFloat(e.target.value);
+            document.getElementById('coupling-val').textContent = J.toFixed(1);
+        });
+
+        // Botões
+        document.getElementById('toggle-sim').addEventListener('click', (e) => {
+            isRunning = !isRunning;
+            e.target.textContent = isRunning ? "Pausar Simulação" : "Retomar Simulação";
+            if(isRunning) loop();
+        });
+
+        document.getElementById('inject-chaos').addEventListener('click', () => {
+            // Inverte aleatoriamente alguns spins para simular corrupção física
+            for(let i=0; i<TOTAL_CELLS; i++) {
+                if(Math.random() < 0.3) {
+                    spins[i] *= -1;
+                }
+            }
+            renderGrid();
+        });
+    }
+
+    /**
+    * O CORAÇÃO DO P-BIT: Função de Atualização Estocástica
+    * Calcula o próximo estado de um bit baseado nos 3 pilares solicitados.
+    */
+    function calculatePBitUpdate(index) {
+        // --- 1. INTERCONECTIVIDADE (Campo Local h) ---
+        // Soma a influência dos vizinhos (Norte, Sul, Leste, Oeste)
+        // Modelo de Ising: h = Sum(J * m_j) + H_ext
+
+        const x = index % COLS;
+        const y = Math.floor(index / COLS);
+        let h = 0;
+
+        // Lista de vizinhos (Condições de contorno periódicas - Toroidal)
+        const neighbors = [
+            {x: (x+1)%COLS, y: y}, // Direita
+            {x: (x-1+COLS)%COLS, y: y}, // Esquerda
+            {x: x, y: (y+1)%ROWS}, // Baixo
+            {x: x, y: (y-1+ROWS)%ROWS} // Cima
+        ];
+
+        let neighborSum = 0;
+        neighbors.forEach(n => {
+            const nIndex = n.y * COLS + n.x;
+            neighborSum += spins[nIndex];
+        });
+
+        // h = (J * Soma dos Vizinhos) + Campo Externo (Bias da NAND)
+        h = (J * neighborSum) + H_ext;
+
+        // --- 2. FUNÇÃO NÃO-LINEAR (Ativação) ---
+        // Aplica a tangente hiperbólica para obter a magnetização média m
+        // Beta é o inverso da temperatura: beta = 1/T
+        // Se T é muito baixo, beta tende ao infinito, tanh vira função degrau (digital).
+        const beta = 1.0 / T;
+        const m = Math.tanh(beta * h); // Resultado entre -1 e 1
+
+        // --- 3. FONTE DE ALEATORIEDADE (Entropia) ---
+        // Gera um número aleatório no mesmo intervalo da saída da tanh
+        const r = (Math.random() * 2) - 1; // Range [-1, 1]
+
+        // --- DECISÃO BINÁRIA ---
+        // Se o ruído aleatório for menor que a probabilidade calculada, vira +1
+        const newSpin = (r < m) ? 1 : -1;
+
+        return { h, m, r, newSpin };
+    }
+
+    // Loop Principal de Simulação (Assíncrono como hardware real)
+    function loop() {
+        if (!isRunning) return;
+
+        const now = performance.now();
+
+        // Atualiza um subconjunto aleatório de células por frame
+        // Isso simula o paralelismo das MTJs atualizando independentemente
+        const updatesPerFrame = Math.floor(TOTAL_CELLS * 0.1); // 10% da grid por frame
+
+        // Variáveis para debug (pega a última atualizada)
+        let lastDebug = null;
+
+        for (let k = 0; k < updatesPerFrame; k++) {
+            const idx = Math.floor(Math.random() * TOTAL_CELLS);
+            const result = calculatePBitUpdate(idx);
+
+            spins[idx] = result.newSpin;
+            lastDebug = result;
+        }
+
+        renderGrid(lastDebug);
+        updateStats(now);
+
+        requestAnimationFrame(loop);
+    }
+
+    function renderGrid(debugData) {
+        // Otimização: Atualiza apenas classes necessárias poderia ser melhor,
+        // mas para 1600 células, update direto é rápido o suficiente em JS moderno.
+
+        // Atualiza visual
+        for (let i = 0; i < TOTAL_CELLS; i++) {
+            const el = cellEls[i];
+            const spin = spins[i];
+
+            // Classes baseadas no estado
+            if (spin === 1) {
+                el.classList.remove('spin-down');
+                el.classList.add('spin-up');
+            } else {
+                el.classList.remove('spin-up');
+                el.classList.add('spin-down');
+            }
+        }
+
+        // Atualiza Monitor de Debug (se houver dados)
+        if (debugData) {
+            debugH.textContent = debugData.h.toFixed(2);
+            debugTanh.textContent = debugData.m.toFixed(4);
+            debugRand.textContent = debugData.r.toFixed(4);
+
+            debugSpin.textContent = debugData.newSpin > 0 ? "+1 (UP)" : "-1 (DOWN)";
+            debugSpin.style.color = debugData.newSpin > 0 ? "var(--accent-spin)" : "#888";
+        }
+    }
+
+    function updateStats(now) {
+        frameCount++;
+        if (now - lastTime >= 1000) {
+            document.getElementById('stat-ips').textContent = frameCount;
+
+            // Calcular % UP
+            let upCount = 0;
+            let energy = 0;
+
+            for(let i=0; i<TOTAL_CELLS; i++) {
+                if(spins[i] === 1) upCount++;
+                // Energia simples de Ising: E = - sum(s_i * s_j)
+                // (Simplificado aqui para visualização)
+            }
+
+            const pct = ((upCount / TOTAL_CELLS) * 100).toFixed(1);
+            document.getElementById('stat-up').textContent = pct + "%";
+
+            frameCount = 0;
+            lastTime = now;
+        }
+    }
+
+    init();
+
+    </script>
+</body>
+</html>

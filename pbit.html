@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador p-SSD: Spintronics & Probabilística</title>
+    <style>
+        :root {
+            --bg-color: #0a0a0c;
+            --panel-bg: #16161a;
+            --text-color: #e0e0e0;
+            --accent-pbit: #bd00ff; /* Roxo Neon para Spintronics */
+            --accent-cpu: #00bcd4;  /* Azul para Lógica Clássica */
+            --error-color: #ff2a2a;
+            --success-color: #00ff9d;
+            --warning-color: #ffae00;
+            --bit-off: #1a1a1d;
+            --bit-on: #2a2a35;
+            --cell-gap: 2px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Courier New', Courier, monospace; /* Fonte técnica */
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 5px;
+        }
+
+        .tagline {
+            font-size: 0.8rem;
+            color: #666;
+        }
+
+        /* Layout Principal */
+        main {
+            display: grid;
+            grid-template-columns: 1fr 320px;
+            gap: 20px;
+            width: 100%;
+            max-width: 1100px;
+        }
+
+        @media (max-width: 800px) {
+            main { grid-template-columns: 1fr; }
+        }
+
+        /* Área da Grade */
+        .memory-container {
+            background: var(--panel-bg);
+            padding: 15px;
+            border-radius: 4px;
+            border: 1px solid #333;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .grid-visualizer {
+            display: grid;
+            grid-template-columns: repeat(32, 1fr);
+            gap: var(--cell-gap);
+            width: 100%;
+            aspect-ratio: 1;
+            background: #000;
+            padding: 2px;
+        }
+
+        .p-bit {
+            background-color: var(--bit-off);
+            transition: background-color 0.1s ease; /* Transição sujeita a física */
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Estados Visuais dos Bits */
+        .p-bit.state-1 {
+            background-color: var(--bit-on); /* Dado lido */
+        }
+        
+        /* P-bit ativo (Spin Up) */
+        .p-bit.spin-up {
+            box-shadow: 0 0 4px var(--success-color) inset;
+        }
+
+        /* Erro (Ruído alto) */
+        .p-bit.noise-high {
+            background-color: var(--error-color);
+            opacity: 0.8;
+        }
+
+        /* Correção em andamento (Relaxação) */
+        .p-bit.relaxing::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: var(--accent-pbit);
+            opacity: 0.3;
+            animation: flux 0.5s infinite;
+        }
+
+        @keyframes flux {
+            0% { opacity: 0.1; }
+            50% { opacity: 0.4; }
+            100% { opacity: 0.1; }
+        }
+
+        /* Controles */
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .panel {
+            background: var(--panel-bg);
+            padding: 15px;
+            border-left: 3px solid #444;
+        }
+
+        .panel.p-mode { border-color: var(--accent-pbit); }
+        .panel.classic-mode { border-color: var(--accent-cpu); }
+
+        h3 {
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            color: #888;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .switch-container {
+            display: flex;
+            background: #000;
+            padding: 2px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+
+        .mode-btn {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: #666;
+            padding: 8px;
+            cursor: pointer;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+        }
+
+        .mode-btn.active {
+            color: #fff;
+            background: #333;
+        }
+        
+        .mode-btn.active[data-mode="pbit"] { background: var(--accent-pbit); }
+        .mode-btn.active[data-mode="classic"] { background: var(--accent-cpu); }
+
+        /* Sliders */
+        .control-row {
+            margin-bottom: 12px;
+        }
+        
+        label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            margin-bottom: 5px;
+            color: #aaa;
+        }
+
+        input[type=range] {
+            width: 100%;
+            height: 4px;
+            background: #333;
+            border-radius: 2px;
+            -webkit-appearance: none;
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 12px; height: 12px;
+            background: #fff;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        /* Botões de Ação */
+        button.action-btn {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            color: #000;
+            font-weight: bold;
+            text-transform: uppercase;
+            cursor: pointer;
+            margin-top: 5px;
+            transition: transform 0.1s;
+        }
+
+        button.action-btn:active { transform: scale(0.98); }
+
+        .btn-inject { background: var(--error-color); color: white; }
+        .btn-fix-classic { background: var(--accent-cpu); }
+        .btn-fix-pbit { background: var(--accent-pbit); color: white; }
+
+        /* Métricas */
+        .metrics {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .metric-box {
+            background: #000;
+            padding: 10px;
+            text-align: center;
+        }
+
+        .val { font-size: 1.2rem; font-weight: bold; display: block; }
+        .lbl { font-size: 0.6rem; color: #666; text-transform: uppercase; }
+
+        /* Log */
+        .log {
+            height: 100px;
+            background: #000;
+            border: 1px solid #333;
+            padding: 8px;
+            font-size: 0.7rem;
+            overflow-y: auto;
+            color: #888;
+            font-family: monospace;
+        }
+        
+        .log p { margin-bottom: 4px; }
+        .log .info { color: var(--accent-cpu); }
+        .log .pbit { color: var(--accent-pbit); }
+        .log .warn { color: var(--warning-color); }
+
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>Simulador <span style="color:var(--accent-pbit)">p-SSD</span> Termodinâmico</h1>
+    <div class="tagline">Arquitetura Spintrônica de Estado Sólido Probabilístico</div>
+</header>
+
+<main>
+    <!-- Área de Visualização -->
+    <section class="memory-container">
+        <div style="display:flex; justify-content:space-between; margin-bottom:5px; font-size:0.75rem; color:#666;">
+            <span>Matriz MRAM / NAND Interface</span>
+            <span id="energy-display">Energia do Sistema: 0.00 J</span>
+        </div>
+        <div id="grid" class="grid-visualizer"></div>
+        <div style="margin-top:5px; font-size:0.7rem; color:#444; display:flex; gap:10px;">
+            <span style="display:flex; align-items:center; gap:4px;"><div style="width:8px;height:8px;background:var(--bit-off)"></div> 0 / Vazio</span>
+            <span style="display:flex; align-items:center; gap:4px;"><div style="width:8px;height:8px;background:var(--bit-on)"></div> 1 / Dado</span>
+            <span style="display:flex; align-items:center; gap:4px;"><div style="width:8px;height:8px;background:var(--error-color)"></div> Erro (Ruído)</span>
+        </div>
+    </section>
+
+    <!-- Painel de Controle -->
+    <section class="controls">
+        
+        <!-- Seletor de Arquitetura -->
+        <div class="panel">
+            <h3>Arquitetura do Controlador</h3>
+            <div class="switch-container">
+                <button class="mode-btn" data-mode="classic" onclick="setMode('classic')">CPU/LDPC (Clássico)</button>
+                <button class="mode-btn active" data-mode="pbit" onclick="setMode('pbit')">p-bit / Spintrônica</button>
+            </div>
+            <p id="mode-desc" style="font-size: 0.75rem; color: #888; line-height: 1.4;">
+                <b>Modo Probabilístico:</b> Usa flutuação térmica e relaxação para minimizar a energia do sistema. Correção sem cálculo iterativo pesado.
+            </p>
+        </div>
+
+        <!-- Parâmetros Físicos -->
+        <div class="panel">
+            <h3>Parâmetros Físicos</h3>
+            
+            <div class="control-row">
+                <label><span>Densidade (Bits/Célula)</span> <span id="density-val">QLC (4)</span></label>
+                <input type="range" id="density-slider" min="1" max="7" value="4" step="1">
+            </div>
+
+            <div class="control-row">
+                <label><span>Temperatura (K)</span> <span id="temp-val">300K</span></label>
+                <input type="range" id="temp-slider" min="0" max="100" value="20">
+                <div style="font-size:0.65rem; color:#555; margin-top:2px;">Aumenta entropia e ruído de leitura.</div>
+            </div>
+        </div>
+
+        <!-- Operações -->
+        <div class="panel" id="actions-panel">
+            <h3>Operações de Leitura/Correção</h3>
+            
+            <button class="action-btn btn-inject" onclick="injectNoise()">Injetar Ruído Térmico</button>
+            <button class="action-btn btn-fix-pbit" id="btn-fix" onclick="runCorrection()">Iniciar Relaxamento (Corrigir)</button>
+
+            <div class="metrics">
+                <div class="metric-box">
+                    <span class="val" id="err-count" style="color:var(--error-color)">0</span>
+                    <span class="lbl">Bits Corrompidos</span>
+                </div>
+                <div class="metric-box">
+                    <span class="val" id="latency-val">0ms</span>
+                    <span class="lbl">Latência</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel" style="flex-grow:1;">
+            <h3>Log do Sistema</h3>
+            <div class="log" id="sys-log"></div>
+        </div>
+
+    </section>
+</main>
+
+<script>
+    /**
+     * Simulação p-SSD
+     * Foco: Lógica Invertível, Relaxação Termodinâmica e Densidade.
+     */
+
+    const GRID_SIZE = 1024; // 32x32
+    const gridEl = document.getElementById('grid');
+    const logEl = document.getElementById('sys-log');
+    
+    // Estado da Simulação
+    let state = {
+        bits: [],         // Valor real (0 ou 1)
+        noisyBits: [],   // Valor lido com erro (0 ou 1, mas flutuante em modo p-bit)
+        mode: 'pbit',     // 'classic' ou 'pbit'
+        temperature: 20,  // 0 a 100
+        density: 4,       // 1 a 7 (SLC a HLC+)
+        isCorrecting: false,
+        systemEnergy: 0
+    };
+
+    // Inicialização
+    function init() {
+        createGrid();
+        updateUI();
+        log("Sistema p-SSD iniciado. MTJs calibrados.", "pbit");
+    }
+
+    function createGrid() {
+        gridEl.innerHTML = '';
+        state.bits = new Array(GRID_SIZE).fill(0);
+        state.noisyBits = new Array(GRID_SIZE).fill(0);
+
+        for (let i = 0; i < GRID_SIZE; i++) {
+            const cell = document.createElement('div');
+            cell.className = 'p-bit';
+            cell.id = `cell-${i}`;
+            gridEl.appendChild(cell);
+        }
+        
+        randomizeData();
+    }
+
+    // Gera dados baseados na densidade (simulação de写入)
+    function randomizeData() {
+        // Quanto maior a densidade, mais "sujo" é o sinal original, mas vamos manter o "ideal" limpo
+        state.bits = state.bits.map(() => Math.random() > 0.5 ? 1 : 0);
+        
+        // Aplica o ruído inicial baseado na densidade (simulando leitura de QLC/PLC)
+        applyReadNoise();
+        renderGrid();
+        log(`Dados gravados. Densidade: Level ${state.density}.`, "info");
+    }
+
+    // Aplica ruído de leitura (Termal + Crosstalk)
+    function applyReadNoise() {
+        let errorChance = (state.density / 20) + (state.temperature / 200);
+        
+        state.noisyBits = state.bits.map((val, idx) => {
+            // Inverte bit com probabilidade baseada na densidade e temperatura
+            if (Math.random() < errorChance) {
+                return val === 1 ? 0 : 1; 
+            }
+            return val;
+        });
+        
+        calculateMetrics();
+    }
+
+    // Renderiza a grade
+    function renderGrid() {
+        const cells = gridEl.children;
+        
+        for (let i = 0; i < GRID_SIZE; i++) {
+            const cell = cells[i];
+            const original = state.bits[i];
+            const current = state.noisyBits[i];
+            
+            cell.className = 'p-bit'; // Reset
+
+            if (original === 1) {
+                cell.classList.add('state-1');
+            }
+
+            // Se estamos em modo correção P-bit, visualizamos a flutuação
+            if (state.isCorrecting && state.mode === 'pbit') {
+                 // Visualização especial para flutuação probabilística
+                 if (Math.random() > 0.9) cell.classList.add('spin-up'); 
+                 cell.style.opacity = 0.5 + (Math.random() * 0.5); // Flicker térmico
+            } else {
+                cell.style.opacity = 1;
+            }
+
+            // Visualização de Erro (Se Noisy != Original)
+            if (current !== original && !state.isCorrecting) {
+                cell.classList.add('noise-high');
+            }
+        }
+        
+        updateEnergyDisplay();
+    }
+
+    // Injeta erro manual
+    function injectNoise() {
+        state.temperature = parseInt(document.getElementById('temp-slider').value);
+        let errorsInjected = 0;
+        
+        // Injeta buracos de dados baseados na temperatura
+        state.noisyBits.forEach((val, i) => {
+            const prob = state.temperature / 100;
+            if (Math.random() < prob * 0.5) {
+                state.noisyBits[i] = val === 1 ? 0 : 1;
+                errorsInjected++;
+            }
+        });
+        
+        applyReadNoise(); // Recalcula baseado na temperatura atual
+        renderGrid();
+        log(`Perturbação térmica injetada. ${state.temperature}K.`, "warn");
+    }
+
+    /**
+     * LÓGICA DE CORREÇÃO
+     */
+    async function runCorrection() {
+        if (state.isCorrecting) return;
+        
+        const btn = document.getElementById('btn-fix');
+        btn.disabled = true;
+        btn.textContent = state.mode === 'pbit' ? "Relaxando..." : "Calculando ECC...";
+        state.isCorrecting = true;
+        
+        const startTime = performance.now();
+
+        if (state.mode === 'classic') {
+            await simulateClassicECC();
+        } else {
+            await simulatePBitRelaxation();
+        }
+
+        const endTime = performance.now();
+        document.getElementById('latency-val').textContent = (endTime - startTime).toFixed(2) + "ms";
+        
+        state.isCorrecting = false;
+        btn.disabled = false;
+        btn.textContent = state.mode === 'pbit' ? "Iniciar Relaxamento" : "Executar LDPC";
+        renderGrid(); // Render final clean state
+    }
+
+    // Modo Clássico: CPU itera e calcula paridade (Simulado)
+    function simulateClassicECC() {
+        log("Iniciando decodificação LDPC iterativa...", "info");
+        
+        // Simula o delay de cálculo da CPU
+        return new Promise(resolve => {
+            // Passos iterativos pesados
+            let iterations = 10 + (state.density * 5); // Mais densidade = mais iteração
+            let currentStep = 0;
+
+            const interval = setInterval(() => {
+                currentStep++;
+                // Corrige erros progressivamente (não perfeito para mostrar esforço)
+                const fixRate = 1 / iterations;
+                
+                for(let i=0; i<GRID_SIZE; i++) {
+                    if(state.noisyBits[i] !== state.bits[i]) {
+                        if(Math.random() < fixRate) state.noisyBits[i] = state.bits[i];
+                    }
+                }
+                
+                renderGrid();
+                
+                if (currentStep >= iterations) {
+                    clearInterval(interval);
+                    // Força correção final
+                    state.noisyBits = [...state.bits];
+                    log(`Correção clássica concluída. ${iterations} iterações de CPU.`, "info");
+                    resolve();
+                }
+            }, 50); // Delay artificial da CPU
+        });
+    }
+
+    // Modo P-Bit: Relaxação Termodinâmico (Simulated Annealing / Ising Model)
+    function simulatePBitRelaxation() {
+        log("Rede p-bit: Minimizando Hamiltoniano do sistema...", "pbit");
+        
+        // Aqui simula a física: O sistema busca o estado de menor energia naturalmente.
+        // Não calculamos. Deixamos a "natureza" (vizinhança) decidir.
+        
+        let energy = 100; // Energia inicial arbitrária
+        let iteration = 0;
+        const maxIterations = 40; // Convergência rápida em hardware real
+
+        return new Promise(resolve => {
+            const step = () => {
+                iteration++;
+                
+                // 1. Fator de Temperatura (Simulated Annealing)
+                // Começa quente (alta aleatoriedade) e esfria (converge)
+                let T = 1.0 - (iteration / maxIterations);
+                if (T < 0) T = 0;
+                
+                // 2. Propagação de Estado (Lógica Invertível)
+                // Cada bit olha seus vizinhos e se ajusta para reduzir conflito
+                const newBits = [...state.noisyBits];
+                
+                for(let i=0; i<GRID_SIZE; i++) {
+                    const neighbors = getNeighbors(i);
+                    const sum = neighbors.reduce((a, b) => a + b, 0);
+                    
+                    // Regra da Maioria + Ruído Térmico
+                    // Se a maioria dos vizinhos é 1, eu tento ser 1.
+                    // O ruído térmico (T) permite escapar de mínimos locais.
+                    
+                    let target = sum > 4 ? 1 : 0;
+                    
+                    // P-Bit flip probability (Função Sigmoide / Boltzmann)
+                    // Se T é alto, a chance de flipper independente dos vizinhos aumenta.
+                    // Se T é baixo, ele segue a vizinhança.
+                    let flipChance = 0;
+                    
+                    if (state.noisyBits[i] !== target) {
+                        flipChance = 0.8 + (T * 0.2); // Forte tendência a corrigir
+                    } else {
+                        flipChance = T * 0.1; // Pequena chance de erro térmico residual
+                    }
+
+                    if (Math.random() < flipChance) {
+                        newBits[i] = target;
+                    }
+                }
+                
+                state.noisyBits = newBits;
+                
+                // Calcular "Energia" do sistema (Hamming distance vs ideal, mas escondido do algoritmo)
+                // Na simulação p-bit, o sistema não "sabe" o ideal, ele busca estabilidade.
+                // Para visualização, calculamos quão perto estamos.
+                let currentErrors = 0;
+                for(let k=0; k<GRID_SIZE; k++) {
+                    if(state.noisyBits[k] !== state.bits[k]) currentErrors++;
+                }
+                state.systemEnergy = currentErrors;
+
+                renderGrid();
+                
+                // Visual de "Fluxo"
+                document.querySelectorAll('.p-bit').forEach(el => el.classList.add('relaxing'));
+
+                if (iteration < maxIterations && currentErrors > 0) {
+                    requestAnimationFrame(step);
+                } else {
+                    // Convergência
+                    state.noisyBits = [...state.bits];
+                    document.querySelectorAll('.p-bit').forEach(el => el.classList.remove('relaxing'));
+                    log(`Equilíbrio Termodinâmico atingido. Entropia minimizada.`, "pbit");
+                    resolve();
+                }
+            };
+            step();
+        });
+    }
+
+    function getNeighbors(index) {
+        // Simplificado: retorna índices vizinhos na grade 32x32
+        const x = index % 32;
+        const y = Math.floor(index / 32);
+        const neighbors = [];
+        
+        for(let dy=-1; dy<=1; dy++) {
+            for(let dx=-1; dx<=1; dx++) {
+                if(dx===0 && dy===0) continue;
+                const nx = x + dx;
+                const ny = y + dy;
+                if(nx >= 0 && nx < 32 && ny >= 0 && ny < 32) {
+                    neighbors.push(state.noisyBits[ny * 32 + nx]);
+                }
+            }
+        }
+        return neighbors;
+    }
+
+    // Utilitários
+    function setMode(mode) {
+        state.mode = mode;
+        document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+        document.querySelector(`.mode-btn[data-mode="${mode}"]`).classList.add('active');
+        
+        const btn = document.getElementById('btn-fix');
+        const desc = document.getElementById('mode-desc');
+        const panel = document.getElementById('actions-panel');
+
+        if (mode === 'pbit') {
+            btn.className = 'action-btn btn-fix-pbit';
+            btn.textContent = "Iniciar Relaxamento (Corrigir)";
+            panel.className = "panel p-mode";
+            desc.innerHTML = "<b>Modo Probabilístico:</b> Usa flutuação térmica para minimizar a energia. A correção é a própria física acontecendo.";
+        } else {
+            btn.className = "action-btn btn-fix-classic";
+            btn.textContent = "Executar Algoritmo LDPC";
+            panel.className = "panel classic-mode";
+            desc.innerHTML = "<b>Modo Clássico:</b> O controlador CPU calcula a probabilidade. Gasta ciclos de clock e energia para lutar contra o ruído.";
+        }
+    }
+
+    function calculateMetrics() {
+        let errors = 0;
+        for(let i=0; i<GRID_SIZE; i++) {
+            if(state.noisyBits[i] !== state.bits[i]) errors++;
+        }
+        document.getElementById('err-count').textContent = errors;
+    }
+
+    function updateEnergyDisplay() {
+        let text = "";
+        if (state.mode === 'pbit') {
+            text = `Energia Livre (Gibbs): ${state.systemEnergy.toFixed(2)}`;
+        } else {
+            text = `Entropia do Dado: ${(state.systemEnergy / 10).toFixed(2)}`;
+        }
+        document.getElementById('energy-display').textContent = text;
+    }
+
+    function updateUI() {
+        // Sliders
+        const dSlider = document.getElementById('density-slider');
+        const tSlider = document.getElementById('temp-slider');
+        
+        dSlider.addEventListener('input', (e) => {
+            state.density = parseInt(e.target.value);
+            const levels = ['SLC', 'MLC', 'TLC', 'QLC', 'PLC', 'HLC', 'X-LC'];
+            document.getElementById('density-val').textContent = `${levels[state.density-1]} (${state.density})`;
+            applyReadNoise(); // Mudar densidade afeta a leitura imediatamente
+            renderGrid();
+        });
+
+        tSlider.addEventListener('input', (e) => {
+            state.temperature = parseInt(e.target.value);
+            let kelvin = 273 + (state.temperature * 2);
+            document.getElementById('temp-val').textContent = `${kelvin}K`;
+            
+            // Se a temperatura subir demais sem correção, dados degradam
+            if (state.temperature > 80) {
+                injectNoise();
+            }
+        });
+    }
+
+    function log(msg, type) {
+        const p = document.createElement('p');
+        p.textContent = `> ${msg}`;
+        if(type) p.classList.add(type);
+        logEl.prepend(p);
+    }
+
+    // Start
+    init();
+
+</script>
+</body>
+</html>
