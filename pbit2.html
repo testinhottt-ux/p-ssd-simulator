@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulação P-Bit FPGA: Modelo de Ising</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --panel-bg: #1e293b;
+            --text-color: #e2e8f0;
+            --accent: #38bdf8;
+            --bit-1: #ef4444; /* Vermelho para +1 */
+            --bit-0: #3b82f6; /* Azul para -1 (0) */
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1 { margin-bottom: 5px; color: var(--accent); }
+        .subtitle { font-size: 0.9em; color: #94a3b8; margin-bottom: 20px; }
+
+        .main-container {
+            display: flex;
+            gap: 30px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        /* Grid de P-Bits */
+        .grid-container {
+            position: relative;
+            background: #000;
+            padding: 10px;
+            border: 2px solid #334155;
+            border-radius: 8px;
+        }
+
+        canvas#pbit-grid {
+            cursor: crosshair;
+        }
+
+        /* Painel de Controle */
+        .controls {
+            width: 300px;
+            background: var(--panel-bg);
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #334155;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        label { font-size: 0.85em; font-weight: bold; display: flex; justify-content: space-between; }
+        
+        input[type=range] {
+            width: 100%;
+            cursor: pointer;
+        }
+
+        .monitor {
+            margin-top: 20px;
+            background: #000;
+            border: 1px solid #334155;
+            padding: 10px;
+            border-radius: 4px;
+        }
+
+        .bitstream-viz {
+            height: 40px;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            overflow: hidden;
+        }
+        
+        .bit-sample {
+            width: 6px;
+            height: 20px;
+            background: #555;
+        }
+
+        .stats {
+            font-size: 0.8em;
+            color: #94a3b8;
+            margin-top: 5px;
+        }
+
+        button {
+            background: var(--accent);
+            color: #0f172a;
+            border: none;
+            padding: 10px;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        button:hover { filter: brightness(1.1); }
+
+        .legend {
+            display: flex;
+            gap: 15px;
+            font-size: 0.8em;
+            margin-top: 5px;
+        }
+        .dot { width: 10px; height: 10px; display: inline-block; border-radius: 50%; margin-right: 5px; }
+    </style>
+</head>
+<body>
+
+    <h1>FPGA P-Bit Simulator</h1>
+    <div class="subtitle">Módulo 1 & 2: Ising Model & Stochastic Computing</div>
+
+    <div class="main-container">
+        <!-- Visualização da Grade -->
+        <div class="grid-container">
+            <canvas id="pbit-grid" width="300" height="300"></canvas>
+            <div class="legend">
+                <span><span class="dot" style="background:var(--bit-1)"></span>Spin Up (+1)</span>
+                <span><span class="dot" style="background:var(--bit-0)"></span>Spin Down (-1)</span>
+                <span><span class="dot" style="background:#a855f7"></span>Flutuando (Incerto)</span>
+            </div>
+        </div>
+
+        <!-- Controles -->
+        <div class="controls">
+            <div class="control-group">
+                <label>Temperatura (Ruído/LFSR) <span id="val-temp">2.0</span></label>
+                <input type="range" id="temp" min="0.1" max="5" step="0.1" value="2.0">
+                <small style="color:#64748b">Alta T = Exploração | Baixa T = Convergência</small>
+            </div>
+
+            <div class="control-group">
+                <label>Acoplamento (J) <span id="val-coup">0.0</span></label>
+                <input type="range" id="coupling" min="0" max="2" step="0.1" value="0">
+                <small style="color:#64748b">Força da correção pelos vizinhos</small>
+            </div>
+
+            <div class="control-group">
+                <label>Viés Externo (Input Flash) <span id="val-bias">1.0</span></label>
+                <input type="range" id="bias" min="0" max="2" step="0.1" value="0.5">
+                <small style="color:#64748b">Força da leitura original (Vth)</small>
+            </div>
+
+            <button onclick="injectNoise()">Injetar Erros (Simular NAND Gasta)</button>
+            <button onclick="anneal()">Executar Annealing (Corrigir)</button>
+
+            <!-- Monitor de Bitstream (Módulo 2) -->
+            <div class="monitor">
+                <label>Bitstream do P-Bit Selecionado:</label>
+                <div class="bitstream-viz" id="bitstream">
+                    <!-- Barras geradas via JS -->
+                </div>
+                <div class="stats">
+                    Média (Soft Decision): <span id="avg-val" style="color:var(--accent)">0.00</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script>
+    // Configuração da Grade
+    const GRID_SIZE = 15;
+    const CELL_SIZE = 20;
+    const canvas = document.getElementById('pbit-grid');
+    const ctx = canvas.getContext('2d');
+
+    // Estado do Sistema
+    let pbits = []; // Array 2D
+    let temperature = 2.0;
+    let couplingJ = 0.0; // Começa sem acoplamento (comportamento de bit normal)
+    let biasH = 0.5;     // Tendência natural dos dados
+
+    // Para visualização do Bitstream
+    let selectedX = 7;
+    let selectedY = 7;
+    let bitstreamHistory = [];
+
+    // Inicialização
+    function initGrid() {
+        pbits = [];
+        for(let y=0; y<GRID_SIZE; y++) {
+            let row = [];
+            for(let x=0; x<GRID_SIZE; x++) {
+                // Inicializa com um padrão de "listras" verticais ideal, mas com ruído
+                // O valor é contínuo entre -1 e 1 para representar a média temporal (Soft Decision)
+                // Mas o estado instantâneo é sempre -1 ou 1
+                row.push({
+                    state: Math.random() > 0.5 ? 1 : -1, // Estado instantâneo (Hard bit)
+                    bias: (x % 4 < 2) ? 1 : -1,          // O dado "correto" (Padrão de listras)
+                    avg: 0                               // Média móvel
+                });
+            }
+            pbits.push(row);
+        }
+        injectNoise(); // Começa bagunçado
+    }
+
+    // Simular erro de leitura da NAND (Vth shift)
+    function injectNoise() {
+        for(let y=0; y<GRID_SIZE; y++) {
+            for(let x=0; x<GRID_SIZE; x++) {
+                // 30% de chance de o bias (leitura da flash) estar invertido/errado
+                if(Math.random() < 0.3) {
+                    pbits[y][x].state *= -1; // Inverte o estado atual
+                }
+            }
+        }
+    }
+
+    // Função de Ativação (Tanh aproximada estocasticamente)
+    function sigmoid(x) {
+        return 1 / (1 + Math.exp(-x));
+    }
+
+    // O Coração do P-Bit (Update Loop)
+    function update() {
+        // Atualizar cada p-bit
+        for(let y=0; y<GRID_SIZE; y++) {
+            for(let x=0; x<GRID_SIZE; x++) {
+                let cell = pbits[y][x];
+
+                // 1. Calcular Input Total (Ising Energy)
+                // I_i = I_bias + sum(J * vizinhos)
+                
+                let neighborSum = 0;
+                // Vizinhos (Cima, Baixo, Esq, Dir)
+                if(y>0) neighborSum += pbits[y-1][x].state;
+                if(y<GRID_SIZE-1) neighborSum += pbits[y+1][x].state;
+                if(x>0) neighborSum += pbits[y][x-1].state;
+                if(x<GRID_SIZE-1) neighborSum += pbits[y][x+1].state;
+
+                // A "Física": Input Total
+                // biasH * cell.bias representa a leitura da célula Flash
+                // couplingJ * neighborSum representa a correção de erro pelos vizinhos
+                let totalInput = (biasH * cell.bias) + (couplingJ * neighborSum);
+
+                // 2. Computação Estocástica (A Mágica do Tanh)
+                // Probabilidade de ser +1: P = sigmoid(2 * Input / T)
+                let probUp = sigmoid(2 * totalInput / temperature);
+
+                // 3. Atualizar Estado (Comparar com número aleatório - LFSR no FPGA)
+                let nextState = Math.random() < probUp ? 1 : -1;
+                cell.state = nextState;
+
+                // Atualizar média móvel (Soft Decision)
+                cell.avg = (cell.avg * 0.9) + (nextState * 0.1);
+            }
+        }
+
+        draw();
+        updateBitstreamViz();
+        requestAnimationFrame(update);
+    }
+
+    // Desenhar a Grade
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        for(let y=0; y<GRID_SIZE; y++) {
+            for(let x=0; x<GRID_SIZE; x++) {
+                let cell = pbits[y][x];
+                let px = x * CELL_SIZE;
+                let py = y * CELL_SIZE;
+
+                // Cor baseada na média (Soft Decision) para visualização suave
+                // Vermelho (+1) a Azul (-1)
+                // Se estiver perto de 0 (roxo), o bit está incerto/flutuando
+                let val = (cell.avg + 1) / 2; // Normalizar para 0..1
+                let r = Math.floor(val * 255);
+                let b = Math.floor((1-val) * 255);
+                
+                ctx.fillStyle = `rgb(${r}, 50, ${b})`;
+                ctx.fillRect(px, py, CELL_SIZE-1, CELL_SIZE-1);
+
+                // Destaque para o selecionado
+                if(x === selectedX && y === selectedY) {
+                    ctx.strokeStyle = "#fff";
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(px, py, CELL_SIZE-1, CELL_SIZE-1);
+                }
+            }
+        }
+    }
+
+    // Visualização do Bitstream (Módulo 2)
+    function updateBitstreamViz() {
+        let cell = pbits[selectedY][selectedX];
+        bitstreamHistory.push(cell.state);
+        if(bitstreamHistory.length > 40) bitstreamHistory.shift();
+
+        const container = document.getElementById('bitstream');
+        container.innerHTML = '';
+        
+        bitstreamHistory.forEach(bit => {
+            let el = document.createElement('div');
+            el.className = 'bit-sample';
+            el.style.background = bit === 1 ? 'var(--bit-1)' : 'var(--bit-0)';
+            container.appendChild(el);
+        });
+
+        // Mostrar valor numérico da Soft Decision
+        document.getElementById('avg-val').innerText = cell.avg.toFixed(2);
+    }
+
+    // Interação de Clique
+    canvas.addEventListener('mousedown', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const x = Math.floor((e.clientX - rect.left) / CELL_SIZE);
+        const y = Math.floor((e.clientY - rect.top) / CELL_SIZE);
+        if(x >= 0 && x < GRID_SIZE && y >= 0 && y < GRID_SIZE) {
+            selectedX = x;
+            selectedY = y;
+            bitstreamHistory = [];
+        }
+    });
+
+    // Controles de UI
+    document.getElementById('temp').addEventListener('input', (e) => {
+        temperature = parseFloat(e.target.value);
+        document.getElementById('val-temp').innerText = temperature.toFixed(1);
+    });
+    document.getElementById('coupling').addEventListener('input', (e) => {
+        couplingJ = parseFloat(e.target.value);
+        document.getElementById('val-coup').innerText = couplingJ.toFixed(1);
+    });
+    document.getElementById('bias').addEventListener('input', (e) => {
+        biasH = parseFloat(e.target.value);
+        document.getElementById('val-bias').innerText = biasH.toFixed(1);
+    });
+
+    // Script de Annealing (Automação)
+    function anneal() {
+        // 1. Aumentar temperatura (Derreter o sistema)
+        temperature = 5.0;
+        document.getElementById('temp').value = 5.0;
+        document.getElementById('val-temp').innerText = "5.0";
+        
+        // 2. Ligar acoplamento forte (Ativar correção de vizinhos)
+        couplingJ = 1.5;
+        document.getElementById('coupling').value = 1.5;
+        document.getElementById('val-coup').innerText = "1.5";
+
+        // 3. Reduzir temperatura gradualmente
+        let interval = setInterval(() => {
+            temperature -= 0.1;
+            document.getElementById('temp').value = temperature;
+            document.getElementById('val-temp').innerText = temperature.toFixed(1);
+            
+            if(temperature <= 0.5) {
+                clearInterval(interval);
+            }
+        }, 100);
+    }
+
+    initGrid();
+    update();
+
+</script>
+</body>
+</html>
