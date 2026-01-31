@@ -2,7 +2,7 @@
 ![License: MIT](https://img.shooray](https://opensource.org/licenses/MIT)Status: Simulação
 
 https://testinhottt-ux.github.io/p-ssd-simulator/pbitreal.html
-
+https://testinhottt-ux.github.io/p-ssd-simulator/pbit2.html
 https://testinhottt-ux.github.io/p-ssd-simulator/pbit.html
 
 Um simulador web interativo e visualmente imersivo baseado no Modelo de Ising para demonstrar o comportamento de P-Bits (Probabilistic Bits) e relaxação termodinâmica em memórias tipo X-LC (Crossbar Logic).
